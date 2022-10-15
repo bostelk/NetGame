@@ -144,11 +144,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="server.cpp" />
+      <ClCompile Include="src/main.cpp" />
+      <ClCompile Include="src/server.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="server.h" />
+      <ClInclude Include="src/server.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
