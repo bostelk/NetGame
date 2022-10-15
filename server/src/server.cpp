@@ -123,7 +123,7 @@ int server_t::run(std::string address, std::string port)
     return 0;
 }
 
-int client_worker_t::do_work(client_worker_t worker)
+int client_worker_t::do_work()
 {
     printf("Client connected!\n");
 
@@ -135,16 +135,16 @@ int client_worker_t::do_work(client_worker_t worker)
     // Receive until the peer shuts down the connection
     do {
 
-        iResult = recv(worker.connection.socket, recvbuf, recvbuflen, 0);
+        iResult = recv(connection.socket, recvbuf, recvbuflen, 0);
         if (iResult > 0) {
             printf("Client bytes received: %d\n", iResult);
             printf("Client received message: %s\n", recvbuf);
 
             // Echo the buffer back to the sender
-            iSendResult = send(worker.connection.socket, recvbuf, iResult, 0);
+            iSendResult = send(connection.socket, recvbuf, iResult, 0);
             if (iSendResult == SOCKET_ERROR) {
                 printf("Client send failed with error: %d\n", WSAGetLastError());
-                closesocket(worker.connection.socket);
+                closesocket(connection.socket);
                 WSACleanup();
                 return 1;
             }
@@ -154,7 +154,7 @@ int client_worker_t::do_work(client_worker_t worker)
             printf("Client connection closing...\n");
         else {
             printf("Client recv failed with error: %d\n", WSAGetLastError());
-            closesocket(worker.connection.socket);
+            closesocket(connection.socket);
             WSACleanup();
             return 1;
         }
@@ -162,21 +162,21 @@ int client_worker_t::do_work(client_worker_t worker)
     } while (iResult > 0);
 
     // shutdown the connection since we're done
-    iResult = shutdown(worker.connection.socket, SD_SEND);
+    iResult = shutdown(connection.socket, SD_SEND);
     if (iResult == SOCKET_ERROR) {
         printf("Client shutdown failed with error: %d\n", WSAGetLastError());
-        closesocket(worker.connection.socket);
+        closesocket(connection.socket);
         WSACleanup();
         return 1;
     }
 
-    CloseHandle(worker.thread);
+    CloseHandle(thread);
     return 0;
 }
 
 DWORD __stdcall client_thread_do_work(LPVOID lpParam)
 {
     client_worker_t worker = *(client_worker_t*)lpParam; // Copy.
-    client_worker_t::do_work(worker);
-    return 0;
+    int ret = worker.do_work();
+    return ret;
 }

@@ -16,7 +16,7 @@ struct client_worker_t
 	client_connection_t connection;
 
 	client_worker_t() :thread(INVALID_HANDLE_VALUE), threadId(-1), connection({ INVALID_SOCKET }) {}
-	static int do_work(client_worker_t worker);
+	int do_work();
 };
 
 DWORD WINAPI client_thread_do_work(LPVOID lpParam);
