@@ -1,6 +1,7 @@
 #undef UNICODE
 
 #define WIN32_LEAN_AND_MEAN
+#include "server.h"
 
 #include <windows.h>
 #include <winsock2.h>
@@ -14,9 +15,8 @@
 // #pragma comment (lib, "Mswsock.lib")
 
 #define DEFAULT_BUFLEN 512
-#define DEFAULT_PORT "27016"
 
-int __cdecl main(void)
+int server_t::run(std::string address, std::string port)
 {
     WSADATA wsaData;
     int iResult;
@@ -45,7 +45,7 @@ int __cdecl main(void)
     //hints.ai_flags = AI_PASSIVE;
 
     // Resolve the server address and port
-    iResult = getaddrinfo("localhost", DEFAULT_PORT, &hints, &result);
+    iResult = getaddrinfo(address.c_str(), port.c_str(), &hints, &result);
     if (iResult != 0) {
         printf("getaddrinfo failed with error: %d\n", iResult);
         WSACleanup();

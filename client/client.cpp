@@ -6,18 +6,16 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "../Shared/WinError.h"
-
+#include "client.h"
 
 // Need to link with Ws2_32.lib, Mswsock.lib, and Advapi32.lib
 #pragma comment (lib, "Ws2_32.lib")
 #pragma comment (lib, "Mswsock.lib")
 #pragma comment (lib, "AdvApi32.lib")
 
-
 #define DEFAULT_BUFLEN 512
-#define DEFAULT_PORT "27016"
 
-int __cdecl main(int argc, char** argv)
+int client_t::run(std::string address, std::string port)
 {
     WSADATA wsaData;
     SOCKET ConnectSocket = INVALID_SOCKET;
@@ -26,14 +24,9 @@ int __cdecl main(int argc, char** argv)
         hints;
     const char* sendbuf = "this is a test";
     char recvbuf[DEFAULT_BUFLEN];
+
     int iResult;
     int recvbuflen = DEFAULT_BUFLEN;
-
-    // Validate the parameters
-    if (argc != 2) {
-        printf("usage: %s server-name\n", argv[0]);
-        return 1;
-    }
 
     // Initialize Winsock
     iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -48,7 +41,7 @@ int __cdecl main(int argc, char** argv)
     hints.ai_protocol = IPPROTO_TCP;
 
     // Resolve the server address and port
-    iResult = getaddrinfo(argv[1], DEFAULT_PORT, &hints, &result);
+    iResult = getaddrinfo(address.c_str(), port.c_str(), &hints, &result);
     if (iResult != 0) {
         WinError systemError;
         printf("getaddrinfo failed with error: %s\n", systemError.to_string().c_str());
