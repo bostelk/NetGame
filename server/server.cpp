@@ -7,6 +7,7 @@
 #include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "../Shared/WinError.h"
 
 // Need to link with Ws2_32.lib
 #pragma comment (lib, "Ws2_32.lib")
@@ -67,14 +68,10 @@ int __cdecl main(void)
     // Setup the TCP listening socket
     iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
     if (iResult == SOCKET_ERROR) {
-        int WSAError = WSAGetLastError();
 
-        char buffer[2048];
-        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, WSAError, NULL, buffer, 2048, NULL);
-
-        printf("bind failed with error: (%d) %s\n", WSAError, buffer);
+        WinError systemError;
+        printf("bind failed with error: %s\n", systemError.to_string().c_str());
         
-
         freeaddrinfo(result);
         closesocket(ListenSocket);
         WSACleanup();

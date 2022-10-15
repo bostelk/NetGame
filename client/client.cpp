@@ -5,6 +5,7 @@
 #include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "../Shared/WinError.h"
 
 
 // Need to link with Ws2_32.lib, Mswsock.lib, and Advapi32.lib
@@ -49,7 +50,9 @@ int __cdecl main(int argc, char** argv)
     // Resolve the server address and port
     iResult = getaddrinfo(argv[1], DEFAULT_PORT, &hints, &result);
     if (iResult != 0) {
-        printf("getaddrinfo failed with error: %d\n", iResult);
+        WinError systemError;
+        printf("getaddrinfo failed with error: %s\n", systemError.to_string().c_str());
+
         WSACleanup();
         return 1;
     }
