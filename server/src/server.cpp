@@ -108,7 +108,7 @@ int server_t::run(std::string address, std::string port)
         int ret = WSAAddressToStringW(&result, resultLen, NULL, buffer, (LPDWORD) & bufferLen);
         assert(ret == 0);
 
-        client_connection_t connection(ClientSocket, std::wstring(buffer));
+        socket_connection_t connection(ClientSocket, std::wstring(buffer));
         connections.push_back(connection);
 
         // Create empty.
