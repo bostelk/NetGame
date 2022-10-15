@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "../../Shared/src/WinError.h"
+#include <cassert>
 
 
 // Need to link with Ws2_32.lib
@@ -89,16 +90,25 @@ int server_t::run(std::string address, std::string port)
     {
         printf("Waiting for client...\n");
 
+        sockaddr result;
+        int resultLen = sizeof(sockaddr);
+
         // Accept a client socket
-        ClientSocket = accept(ListenSocket, NULL, NULL);
+        ClientSocket = accept(ListenSocket, &result, &resultLen);
         if (ClientSocket == INVALID_SOCKET) {
-            printf("accept failed with error: %d\n", WSAGetLastError());
+            WinError systemError;
+            printf("accept failed with error: %s\n", systemError.to_string().c_str());
             closesocket(ListenSocket);
             WSACleanup();
             continue; //return 1;
         }
 
-        client_connection_t connection(ClientSocket);
+        wchar_t buffer[2048];
+        int bufferLen = 2048;
+        int ret = WSAAddressToStringW(&result, resultLen, NULL, buffer, (LPDWORD) & bufferLen);
+        assert(ret == 0);
+
+        client_connection_t connection(ClientSocket, std::wstring(buffer));
         connections.push_back(connection);
 
         // Create empty.
@@ -125,7 +135,7 @@ int server_t::run(std::string address, std::string port)
 
 int client_worker_t::do_work()
 {
-    printf("Client connected!\n");
+    printf("Client %ls connected!\n", connection.address.c_str());
 
     int iResult;
     int iSendResult;

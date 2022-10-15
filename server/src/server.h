@@ -6,7 +6,8 @@
 struct client_connection_t
 {
 	SOCKET socket;
-	client_connection_t(SOCKET socket) :socket(socket) {}
+	std::wstring address;
+	client_connection_t(SOCKET socket, std::wstring address) :socket(socket), address(address) {}
 };
 
 struct client_worker_t
@@ -15,7 +16,7 @@ struct client_worker_t
 	int threadId;
 	client_connection_t connection;
 
-	client_worker_t() :thread(INVALID_HANDLE_VALUE), threadId(-1), connection({ INVALID_SOCKET }) {}
+	client_worker_t() :thread(INVALID_HANDLE_VALUE), threadId(-1), connection({ INVALID_SOCKET, L""}) {}
 	int do_work();
 };
 
