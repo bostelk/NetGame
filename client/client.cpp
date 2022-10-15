@@ -69,6 +69,12 @@ int __cdecl main(int argc, char** argv)
             return 1;
         }
 
+        char buffer[2048];
+        inet_ntop(ptr->ai_family, ptr->ai_addr, buffer, 2048);
+        printf("Created socket on address: %s\n", buffer);
+
+        printf("Connecting to server...\n");
+
         // Connect to server.
         iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
         if (iResult == SOCKET_ERROR) {
@@ -86,6 +92,8 @@ int __cdecl main(int argc, char** argv)
         WSACleanup();
         return 1;
     }
+
+    printf("Connected!\n");
 
     // Send an initial buffer
     iResult = send(ConnectSocket, sendbuf, (int)strlen(sendbuf), 0);
