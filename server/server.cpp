@@ -27,10 +27,6 @@ int server_t::run(std::string address, std::string port)
     struct addrinfo* result = NULL;
     struct addrinfo hints;
 
-    int iSendResult;
-    char recvbuf[DEFAULT_BUFLEN];
-    int recvbuflen = DEFAULT_BUFLEN;
-
     // Initialize Winsock
     iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (iResult != 0) {
@@ -88,43 +84,76 @@ int server_t::run(std::string address, std::string port)
         return 1;
     }
 
-    printf("Waiting for client...\n");
+    while (true)
+    {
+        printf("Waiting for client...\n");
 
-    // Accept a client socket
-    ClientSocket = accept(ListenSocket, NULL, NULL);
-    if (ClientSocket == INVALID_SOCKET) {
-        printf("accept failed with error: %d\n", WSAGetLastError());
-        closesocket(ListenSocket);
-        WSACleanup();
-        return 1;
+        // Accept a client socket
+        ClientSocket = accept(ListenSocket, NULL, NULL);
+        if (ClientSocket == INVALID_SOCKET) {
+            printf("accept failed with error: %d\n", WSAGetLastError());
+            closesocket(ListenSocket);
+            WSACleanup();
+            continue; //return 1;
+        }
+
+        client_connection_t connection(ClientSocket);
+        connections.push_back(connection);
+
+        // Create empty.
+        client_workers.push_back({});
+        // Reference created.
+        client_worker_t& worker = client_workers[client_workers.size() - 1];
+
+        worker.connection = connection;
+        worker.thread = CreateThread(
+            NULL,                   // default security attributes
+            0,                      // use default stack size  
+            client_thread_do_work,       // thread function name
+            &worker,          // argument to thread function 
+            0,                      // use default creation flags 
+            (LPDWORD)&worker.threadId);   // returns the thread identifier 
     }
 
-    // No longer need server socket
+    // cleanup
     closesocket(ListenSocket);
+    WSACleanup();
+
+    return 0;
+}
+
+int client_worker_t::do_work(client_worker_t worker)
+{
+    printf("Client connected!\n");
+
+    int iResult;
+    int iSendResult;
+    char recvbuf[DEFAULT_BUFLEN];
+    int recvbuflen = DEFAULT_BUFLEN;
 
     // Receive until the peer shuts down the connection
     do {
 
-        iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
+        iResult = recv(worker.connection.socket, recvbuf, recvbuflen, 0);
         if (iResult > 0) {
-            printf("Bytes received: %d\n", iResult);
-            printf("received message: %s\n", recvbuf);
+            printf("Client bytes received: %d\n", iResult);
+            printf("Client received message: %s\n", recvbuf);
 
             // Echo the buffer back to the sender
-            iSendResult = send(ClientSocket, recvbuf, iResult, 0);
+            iSendResult = send(worker.connection.socket, recvbuf, iResult, 0);
             if (iSendResult == SOCKET_ERROR) {
-                printf("send failed with error: %d\n", WSAGetLastError());
-                closesocket(ClientSocket);
+                printf("Client send failed with error: %d\n", WSAGetLastError());
+                closesocket(worker.connection.socket);
                 WSACleanup();
                 return 1;
             }
-            printf("Bytes sent: %d\n", iSendResult);
+            printf("Client bytes sent: %d\n", iSendResult);
         }
         else if (iResult == 0)
-            printf("Connection closing...\n");
+            printf("Client connection closing...\n");
         else {
-            printf("recv failed with error: %d\n", WSAGetLastError());
-            closesocket(ClientSocket);
+            printf("Client recv failed with error: %d\n", WSAGetLastError());
+            closesocket(worker.connection.socket);
             WSACleanup();
             return 1;
         }
@@ -132,17 +161,21 @@ int server_t::run(std::string address, std::string port)
     } while (iResult > 0);
 
     // shutdown the connection since we're done
-    iResult = shutdown(ClientSocket, SD_SEND);
+    iResult = shutdown(worker.connection.socket, SD_SEND);
     if (iResult == SOCKET_ERROR) {
-        printf("shutdown failed with error: %d\n", WSAGetLastError());
-        closesocket(ClientSocket);
+        printf("Client shutdown failed with error: %d\n", WSAGetLastError());
+        closesocket(worker.connection.socket);
         WSACleanup();
         return 1;
     }
 
-    // cleanup
-    closesocket(ClientSocket);
-    WSACleanup();
+    CloseHandle(worker.thread);
+    return 0;
+}
 
+DWORD __stdcall client_thread_do_work(LPVOID lpParam)
+{
+    client_worker_t worker = *(client_worker_t*)lpParam; // Copy.
+    client_worker_t::do_work(worker);
     return 0;
 }
