@@ -13,7 +13,7 @@
 // #pragma comment (lib, "Mswsock.lib")
 
 #define DEFAULT_BUFLEN 512
-#define DEFAULT_PORT "27015"
+#define DEFAULT_PORT "27016"
 
 int __cdecl main(void)
 {
@@ -41,10 +41,10 @@ int __cdecl main(void)
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_PASSIVE;
+    //hints.ai_flags = AI_PASSIVE;
 
     // Resolve the server address and port
-    iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
+    iResult = getaddrinfo("localhost", DEFAULT_PORT, &hints, &result);
     if (iResult != 0) {
         printf("getaddrinfo failed with error: %d\n", iResult);
         WSACleanup();
@@ -60,10 +60,21 @@ int __cdecl main(void)
         return 1;
     }
 
+    char buffer[2048];
+    inet_ntop(result->ai_family, result->ai_addr, buffer, 2048);
+    printf("Bind socket: %s\n", buffer);
+
     // Setup the TCP listening socket
     iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
     if (iResult == SOCKET_ERROR) {
-        printf("bind failed with error: %d\n", WSAGetLastError());
+        int WSAError = WSAGetLastError();
+
+        char buffer[2048];
+        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, WSAError, NULL, buffer, 2048, NULL);
+
+        printf("bind failed with error: (%d) %s\n", WSAError, buffer);
+        
+
         freeaddrinfo(result);
         closesocket(ListenSocket);
         WSACleanup();
@@ -79,6 +90,8 @@ int __cdecl main(void)
         WSACleanup();
         return 1;
     }
+
+    printf("Waiting for client...\n");
 
     // Accept a client socket
     ClientSocket = accept(ListenSocket, NULL, NULL);
@@ -98,6 +111,7 @@ int __cdecl main(void)
         iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
         if (iResult > 0) {
             printf("Bytes received: %d\n", iResult);
+            printf("received message: %s\n", recvbuf);
 
             // Echo the buffer back to the sender
             iSendResult = send(ClientSocket, recvbuf, iResult, 0);
