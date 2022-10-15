@@ -90,7 +90,7 @@ int client_t::run(std::string address, std::string port)
     printf("Connected!\n");
 
     // Send an initial buffer
-    iResult = send(ConnectSocket, sendbuf, (int)strlen(sendbuf), 0);
+    iResult = send(ConnectSocket, sendbuf, (int)strlen(sendbuf) + 1 /* Add 1 for null terminator */, 0);
     if (iResult == SOCKET_ERROR) {
         printf("send failed with error: %d\n", WSAGetLastError());
         closesocket(ConnectSocket);
@@ -111,10 +111,12 @@ int client_t::run(std::string address, std::string port)
 
     // Receive until the peer closes the connection
     do {
+        ZeroMemory(recvbuf, 0, recvbuflen);
 
         iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
         if (iResult > 0) {
             printf("Bytes received: %d\n", iResult);
+            printf("Client received message: %s\n", recvbuf);
         }
         else if (iResult == 0)
             printf("Connection closed\n");

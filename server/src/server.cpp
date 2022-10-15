@@ -111,25 +111,38 @@ int server_t::run(std::string address, std::string port)
         socket_connection_t connection(ClientSocket, std::wstring(buffer));
         connections.push_back(connection);
 
-        // Create empty.
-        client_workers.push_back({});
-        // Reference created.
-        client_worker_t& worker = client_workers[client_workers.size() - 1];
-
-        worker.connection = connection;
-        worker.thread = CreateThread(
+        auto worker = std::make_unique<client_worker_t>();
+        worker->connection = connection;
+        worker->thread = CreateThread(
             NULL,                   // default security attributes
             0,                      // use default stack size  
             client_thread_do_work,       // thread function name
-            &worker,          // argument to thread function 
+            worker.get(),          // argument to thread function 
             0,                      // use default creation flags 
-            (LPDWORD)&worker.threadId);   // returns the thread identifier 
+            (LPDWORD)&worker->threadId);   // returns the thread identifier 
+        client_workers.push_back(std::move(worker));
+
+        std::string message = std::string(connection.address.begin(), connection.address.end()) + " connected.";
+        packet_t packet(message.size() + 1); // Add 1 for null terminator.
+        packet.alloc();
+        memcpy(packet.bytes, message.c_str(), packet.size_bytes);
+        send_packet_to_clients(packet);
     }
 
     // cleanup
     closesocket(ListenSocket);
     WSACleanup();
 
+    return 0;
+}
+
+int server_t::send_packet_to_clients(packet_t packet)
+{
+    for (auto& worker : client_workers)
+    {
+        std::lock_guard<std::mutex> lock(worker->sendMutex);
+        worker->sendQueue.push(packet);
+    }
     return 0;
 }
 
@@ -143,22 +156,22 @@ int client_worker_t::do_work()
     int recvbuflen = DEFAULT_BUFLEN;
 
     // Receive until the peer shuts down the connection
+    // Send queued packets
+    // Transmission is half-duplex.
     do {
+        ZeroMemory(recvbuf, 0, recvbuflen);
 
         iResult = recv(connection.socket, recvbuf, recvbuflen, 0);
         if (iResult > 0) {
             printf("Client bytes received: %d\n", iResult);
-            printf("Client received message: %s\n", recvbuf);
+            printf("Server received message: %s\n", recvbuf);
 
-            // Echo the buffer back to the sender
-            iSendResult = send(connection.socket, recvbuf, iResult, 0);
-            if (iSendResult == SOCKET_ERROR) {
-                printf("Client send failed with error: %d\n", WSAGetLastError());
-                closesocket(connection.socket);
-                WSACleanup();
-                return 1;
-            }
-            printf("Client bytes sent: %d\n", iSendResult);
+            packet_t packet(iResult);
+            packet.alloc();
+            memcpy(packet.bytes, recvbuf, packet.size_bytes);
+            
+            // Do not need to lock.
+            sendQueue.push(packet);
         }
         else if (iResult == 0)
             printf("Client connection closing...\n");
@@ -169,6 +182,28 @@ int client_worker_t::do_work()
             return 1;
         }
 
+        {
+            std::lock_guard<std::mutex> lock(sendMutex);
+            if (!sendQueue.empty())
+            {
+                packet_t packet = sendQueue.front();
+                sendQueue.pop();
+
+                // Echo the buffer back to the sender
+                iSendResult = send(connection.socket, (const char*)packet.bytes, packet.size_bytes, 0);
+                if (iSendResult == SOCKET_ERROR) {
+                    printf("Client send failed with error: %d\n", WSAGetLastError());
+                    closesocket(connection.socket);
+                    WSACleanup();
+                    return 1;
+                }
+                else {
+                    printf("Client bytes sent: %d\n", iSendResult);
+                }
+
+                packet.release();
+            }
+        }
     } while (iResult > 0);
 
     // shutdown the connection since we're done
@@ -186,7 +221,7 @@ int client_worker_t::do_work()
 
 DWORD __stdcall client_thread_do_work(LPVOID lpParam)
 {
-    client_worker_t worker = *(client_worker_t*)lpParam; // Copy.
-    int ret = worker.do_work();
+    client_worker_t* worker = (client_worker_t*)lpParam;
+    int ret = worker->do_work();
     return ret;
 }
