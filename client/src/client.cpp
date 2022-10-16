@@ -9,6 +9,7 @@
 #include "client.h"
 #include "../../Shared/socketconnection.h"
 #include <cassert>
+#include "../../Shared/packet.h"
 
 
 // Need to link with Ws2_32.lib, Mswsock.lib, and Advapi32.lib
@@ -25,7 +26,6 @@ int client_t::run(std::string address, std::string port)
     struct addrinfo* result = NULL,
         * ptr = NULL,
         hints;
-    const char* sendbuf = "this is a test";
     char recvbuf[DEFAULT_BUFLEN];
 
     int iResult;
@@ -97,14 +97,22 @@ int client_t::run(std::string address, std::string port)
 
     printf("Connected! to server: %ls\n", connection.address.c_str());
 
+    std::string message = "hello world!";
+
+    packet_t  packet(message.size() + 1);
+    packet.alloc();
+    memcpy(packet.bytes, message.c_str(), packet.size_bytes);
+
     // Send an initial buffer
-    iResult = send(ConnectSocket, sendbuf, (int)strlen(sendbuf) + 1 /* Add 1 for null terminator */, 0);
+    iResult = send(ConnectSocket, (char*)packet.bytes, packet.size_bytes, 0);
     if (iResult == SOCKET_ERROR) {
         printf("send failed with error: %d\n", WSAGetLastError());
         closesocket(ConnectSocket);
         WSACleanup();
         return 1;
     }
+
+    packet.release();
 
     printf("Bytes Sent: %ld\n", iResult);
 
