@@ -127,6 +127,7 @@ int server_t::run(std::string address, std::string port)
         packet.alloc();
         memcpy(packet.bytes, message.c_str(), packet.size_bytes);
         send_packet_to_clients(packet);
+        packet.release();
     }
 
     // cleanup
@@ -140,8 +141,19 @@ int server_t::send_packet_to_clients(packet_t packet)
 {
     for (auto& worker : client_workers)
     {
-        std::lock_guard<std::mutex> lock(worker->sendMutex);
-        worker->sendQueue.push(packet);
+        // send will block when there is no buffer space left within the transport system.
+        int iSendResult = send(worker->connection.socket, (const char*)packet.bytes, packet.size_bytes, 0);
+        if (iSendResult == SOCKET_ERROR) {
+            printf("Client send failed with error: %d\n", WSAGetLastError());
+            closesocket(worker->connection.socket);
+            WSACleanup();
+            CloseHandle(worker->thread);
+            return 1;
+        }
+        else
+        {
+            printf("Client bytes sent: %d\n", iSendResult);
+        }
     }
     return 0;
 }
@@ -155,56 +167,25 @@ int client_worker_t::do_work()
     char recvbuf[DEFAULT_BUFLEN];
     int recvbuflen = DEFAULT_BUFLEN;
 
-    // Receive until the peer shuts down the connection
-    // Send queued packets
-    // Transmission is half-duplex.
-    do {
-        ZeroMemory(recvbuf, 0, recvbuflen);
+	// Receive until the peer shuts down the connection
+	do {
+		ZeroMemory(recvbuf, 0, recvbuflen);
 
-        iResult = recv(connection.socket, recvbuf, recvbuflen, 0);
-        if (iResult > 0) {
-            printf("Client bytes received: %d\n", iResult);
-            printf("Server received message: %s\n", recvbuf);
-
-            packet_t packet(iResult);
-            packet.alloc();
-            memcpy(packet.bytes, recvbuf, packet.size_bytes);
-            
-            // Do not need to lock.
-            sendQueue.push(packet);
-        }
-        else if (iResult == 0)
-            printf("Client connection closing...\n");
-        else {
-            printf("Client recv failed with error: %d\n", WSAGetLastError());
-            closesocket(connection.socket);
-            WSACleanup();
-            return 1;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(sendMutex);
-            if (!sendQueue.empty())
-            {
-                packet_t packet = sendQueue.front();
-                sendQueue.pop();
-
-                // Echo the buffer back to the sender
-                iSendResult = send(connection.socket, (const char*)packet.bytes, packet.size_bytes, 0);
-                if (iSendResult == SOCKET_ERROR) {
-                    printf("Client send failed with error: %d\n", WSAGetLastError());
-                    closesocket(connection.socket);
-                    WSACleanup();
-                    return 1;
-                }
-                else {
-                    printf("Client bytes sent: %d\n", iSendResult);
-                }
-
-                packet.release();
-            }
-        }
-    } while (iResult > 0);
+		iResult = recv(connection.socket, recvbuf, recvbuflen, 0);
+		if (iResult > 0) {
+			printf("Client bytes received: %d\n", iResult);
+			printf("Server received message: %s\n", recvbuf);
+		}
+		else if (iResult == 0)
+			printf("Client connection closing...\n");
+		else {
+			printf("Client recv failed with error: %d\n", WSAGetLastError());
+			closesocket(connection.socket);
+			WSACleanup();
+			CloseHandle(thread);
+			return 1;
+		}
+	} while (iResult > 0);
 
     // shutdown the connection since we're done
     iResult = shutdown(connection.socket, SD_SEND);
@@ -212,6 +193,7 @@ int client_worker_t::do_work()
         printf("Client shutdown failed with error: %d\n", WSAGetLastError());
         closesocket(connection.socket);
         WSACleanup();
+        CloseHandle(thread);
         return 1;
     }
 

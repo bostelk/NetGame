@@ -100,15 +100,6 @@ int client_t::run(std::string address, std::string port)
 
     printf("Bytes Sent: %ld\n", iResult);
 
-    // shutdown the connection since no more data will be sent
-    iResult = shutdown(ConnectSocket, SD_SEND);
-    if (iResult == SOCKET_ERROR) {
-        printf("shutdown failed with error: %d\n", WSAGetLastError());
-        closesocket(ConnectSocket);
-        WSACleanup();
-        return 1;
-    }
-
     // Receive until the peer closes the connection
     do {
         ZeroMemory(recvbuf, 0, recvbuflen);
@@ -124,6 +115,16 @@ int client_t::run(std::string address, std::string port)
             printf("recv failed with error: %d\n", WSAGetLastError());
 
     } while (iResult > 0);
+
+    // shutdown the connection since no more data will be sent
+    iResult = shutdown(ConnectSocket, SD_SEND);
+    if (iResult == SOCKET_ERROR) {
+        printf("shutdown failed with error: %d\n", WSAGetLastError());
+        closesocket(ConnectSocket);
+        WSACleanup();
+        return 1;
+    }
+
 
     // cleanup
     closesocket(ConnectSocket);
