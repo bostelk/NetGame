@@ -7,9 +7,7 @@
 #include <stdio.h>
 #include "../../Shared/src/WinError.h"
 #include "client.h"
-#include "../../Shared/socketconnection.h"
 #include <cassert>
-#include "../../Shared/packet.h"
 
 
 // Need to link with Ws2_32.lib, Mswsock.lib, and Advapi32.lib
@@ -52,8 +50,6 @@ int client_t::run(std::string address, std::string port)
         WSACleanup();
         return 1;
     }
-
-    socket_connection_t connection;
 
     // Attempt to connect to an address until one succeeds
     for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
@@ -98,23 +94,11 @@ int client_t::run(std::string address, std::string port)
     printf("Connected! to server: %ls\n", connection.address.c_str());
 
     std::string message = "hello world!";
-
     packet_t packet(message.size() + 1);
     packet.alloc();
     memcpy(packet.bytes, message.c_str(), packet.size_bytes);
-
-    // Send an initial buffer
-    iResult = send(ConnectSocket, (char*)packet.bytes, packet.size_bytes, 0);
-    if (iResult == SOCKET_ERROR) {
-        printf("send failed with error: %d\n", WSAGetLastError());
-        closesocket(ConnectSocket);
-        WSACleanup();
-        return 1;
-    }
-
+    send_to_server(packet);
     packet.release();
-
-    printf("Bytes Sent: %ld\n", iResult);
 
     // Receive until the peer closes the connection
     do {
@@ -146,4 +130,17 @@ int client_t::run(std::string address, std::string port)
     WSACleanup();
 
     return 0;
+}
+
+int client_t::send_to_server(packet_t packet)
+{
+    int iResult = send(connection.socket, (char*)packet.bytes, packet.size_bytes, 0);
+    if (iResult == SOCKET_ERROR) {
+        printf("send failed with error: %d\n", WSAGetLastError());
+        closesocket(connection.socket);
+        WSACleanup();
+        return 1;
+    }
+
+    printf("Bytes Sent: %ld\n", iResult);
 }
