@@ -99,7 +99,7 @@ int client_t::run(std::string address, std::string port)
 
     std::string message = "hello world!";
 
-    packet_t  packet(message.size() + 1);
+    packet_t packet(message.size() + 1);
     packet.alloc();
     memcpy(packet.bytes, message.c_str(), packet.size_bytes);
 
