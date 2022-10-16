@@ -40,6 +40,11 @@ int server_t::run(std::string address, std::string port)
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
+
+    // UDP is connectionless.
+    // hints.ai_socktype = SOCK_DGRAM;
+    // hints.ai_protocol = IPPROTO_UDP;
+
     //hints.ai_flags = AI_PASSIVE;
 
     // Resolve the server address and port

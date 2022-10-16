@@ -41,6 +41,10 @@ int client_t::run(std::string address, std::string port)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
+    // UDP is connectionless.
+    // hints.ai_socktype = SOCK_DGRAM;
+    // hints.ai_protocol = IPPROTO_UDP;
+
     // Resolve the server address and port
     iResult = getaddrinfo(address.c_str(), port.c_str(), &hints, &result);
     if (iResult != 0) {
@@ -111,9 +115,10 @@ int client_t::run(std::string address, std::string port)
         }
         else if (iResult == 0)
             printf("Connection closed\n");
-        else
-            printf("recv failed with error: %d\n", WSAGetLastError());
-
+        else {
+            WinError systemError;
+            printf("recv failed with error: %s\n", systemError.to_string().c_str());
+        }
     } while (iResult > 0);
 
     // shutdown the connection since no more data will be sent
@@ -134,6 +139,7 @@ int client_t::run(std::string address, std::string port)
 
 int client_t::send_to_server(packet_t packet)
 {
+    assert(packet.size_bytes < connection.get_max_size_bytes());
     int iResult = send(connection.socket, (char*)packet.bytes, packet.size_bytes, 0);
     if (iResult == SOCKET_ERROR) {
         printf("send failed with error: %d\n", WSAGetLastError());
