@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include "../../Shared/src/WinError.h"
 #include "client.h"
+#include "../../Shared/socketconnection.h"
+#include <cassert>
 
 
 // Need to link with Ws2_32.lib, Mswsock.lib, and Advapi32.lib
@@ -51,6 +53,8 @@ int client_t::run(std::string address, std::string port)
         return 1;
     }
 
+    socket_connection_t connection;
+
     // Attempt to connect to an address until one succeeds
     for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
 
@@ -63,19 +67,23 @@ int client_t::run(std::string address, std::string port)
             return 1;
         }
 
-        char buffer[2048];
-        inet_ntop(ptr->ai_family, ptr->ai_addr, buffer, 2048);
-        printf("Created socket on address: %s\n", buffer);
-
         printf("Connecting to server...\n");
+
+        wchar_t buffer[2048];
+        int bufferLen = 2048;
+        int ret = WSAAddressToStringW(ptr->ai_addr, ptr->ai_addrlen, NULL, buffer, (LPDWORD)&bufferLen);
+        assert(ret == 0);
 
         // Connect to server.
         iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
         if (iResult == SOCKET_ERROR) {
+            printf("Connection to server failed: %ls\n", buffer);
             closesocket(ConnectSocket);
             ConnectSocket = INVALID_SOCKET;
             continue;
         }
+
+        connection = socket_connection_t(ConnectSocket, std::wstring(buffer));
         break;
     }
 
@@ -87,7 +95,7 @@ int client_t::run(std::string address, std::string port)
         return 1;
     }
 
-    printf("Connected!\n");
+    printf("Connected! to server: %ls\n", connection.address.c_str());
 
     // Send an initial buffer
     iResult = send(ConnectSocket, sendbuf, (int)strlen(sendbuf) + 1 /* Add 1 for null terminator */, 0);
@@ -124,7 +132,6 @@ int client_t::run(std::string address, std::string port)
         WSACleanup();
         return 1;
     }
-
 
     // cleanup
     closesocket(ConnectSocket);

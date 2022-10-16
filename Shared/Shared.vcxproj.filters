@@ -15,12 +15,24 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="WinError.cpp">
+    <ClCompile Include="packet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="socketconnection.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src/WinError.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="WinError.h">
+    <ClInclude Include="packet.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="socketconnection.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src/WinError.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -141,6 +141,7 @@ int server_t::send_packet_to_clients(packet_t packet)
 {
     for (auto& worker : client_workers)
     {
+        assert(packet.size_bytes < worker->connection.get_max_size_bytes());
         // send will block when there is no buffer space left within the transport system.
         int iSendResult = send(worker->connection.socket, (const char*)packet.bytes, packet.size_bytes, 0);
         if (iSendResult == SOCKET_ERROR) {
