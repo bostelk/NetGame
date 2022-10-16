@@ -126,16 +126,16 @@ int server_t::run(std::string address, std::string port)
             connection.sockaddrlen = resultLen;
             connections.push_back(connection);
 
-            auto worker = std::make_unique<client_worker_t>();
+            auto worker = std::make_unique<server_worker_t>();
             worker->connection = connection;
             worker->thread = CreateThread(
                 NULL,                   // default security attributes
                 0,                      // use default stack size  
-                client_thread_do_work,       // thread function name
+                server_thread_do_work,       // thread function name
                 worker.get(),          // argument to thread function 
                 0,                      // use default creation flags 
                 (LPDWORD)&worker->threadId);   // returns the thread identifier 
-            client_workers.push_back(std::move(worker));
+            server_workers.push_back(std::move(worker));
 
             packet_t packet = packet_t::from_string(connection.get_address_name() + " connected.");
             send_packet_to_clients(packet);
@@ -183,7 +183,7 @@ int server_t::run(std::string address, std::string port)
 
 int server_t::send_packet_to_clients(packet_t packet)
 {
-    for (auto& worker : client_workers)
+    for (auto& worker : server_workers)
     {
         assert(packet.size_bytes < worker->connection.get_max_size_bytes());
         // send will block when there is no buffer space left within the transport system.
@@ -218,7 +218,7 @@ int server_t::send_packet_to_clients(packet_t packet)
     return 0;
 }
 
-int client_worker_t::do_work()
+int server_worker_t::do_work()
 {
     printf("Client %s connected!\n", connection.get_address_name().c_str());
 
@@ -275,9 +275,9 @@ int client_worker_t::do_work()
     return 0;
 }
 
-DWORD __stdcall client_thread_do_work(LPVOID lpParam)
+DWORD __stdcall server_thread_do_work(LPVOID lpParam)
 {
-    client_worker_t* worker = (client_worker_t*)lpParam;
+    server_worker_t* worker = (server_worker_t*)lpParam;
     int ret = worker->do_work();
     return ret;
 }
