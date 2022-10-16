@@ -9,10 +9,13 @@
 struct socket_connection_t
 {
 	SOCKET socket;
-	std::wstring address;
+	SOCKADDR_STORAGE sockaddr;
+	int sockaddrlen;
 
-	socket_connection_t() :socket(INVALID_SOCKET), address(L"") {}
-	socket_connection_t(SOCKET socket, std::wstring address) :socket(socket), address(address) {}
+	socket_connection_t() :socket(INVALID_SOCKET) {}
+	socket_connection_t(SOCKET socket) :socket(socket) {}
 
 	size_t get_max_size_bytes();
+	std::string get_address_name();
+	int get_socket_type();
 };

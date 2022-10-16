@@ -14,3 +14,22 @@ size_t socket_connection_t::get_max_size_bytes()
     }
     return value;
 }
+
+std::string socket_connection_t::get_address_name()
+{
+    wchar_t buffer[2048];
+    int bufferLen = 2048;
+    int ret = WSAAddressToStringW((SOCKADDR*)&sockaddr, sockaddrlen, NULL, buffer, (LPDWORD)&bufferLen);
+    assert(ret == 0);
+    std::wstring name(buffer, bufferLen);
+    return std::string(name.begin(), name.end());
+}
+
+int socket_connection_t::get_socket_type()
+{
+    int optval = -1;
+    int optvallen = sizeof(int);
+    int ret = getsockopt(socket, SOL_SOCKET, SO_TYPE, (char*)&optval, &optvallen);
+    assert(ret == 0);
+    return optval;
+}

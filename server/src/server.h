@@ -15,7 +15,7 @@ struct client_worker_t
 	int threadId;
 	socket_connection_t connection;
 
-	client_worker_t() :thread(INVALID_HANDLE_VALUE), threadId(-1), connection({ INVALID_SOCKET, L""}) {}
+	client_worker_t() :thread(INVALID_HANDLE_VALUE), threadId(-1), connection({ INVALID_SOCKET }) {}
 
 	int do_work();
 };

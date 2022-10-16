@@ -36,15 +36,23 @@ int server_t::run(std::string address, std::string port)
         return 1;
     }
 
+    int DefaultSocketType = SOCK_DGRAM;
+
     ZeroMemory(&hints, sizeof(hints));
     hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    // UDP is connectionless.
-    // hints.ai_socktype = SOCK_DGRAM;
-    // hints.ai_protocol = IPPROTO_UDP;
-
+    hints.ai_socktype = DefaultSocketType;
+    switch (hints.ai_socktype)
+    {
+    case SOCK_STREAM:
+        hints.ai_protocol = IPPROTO_TCP;
+        break;
+    case SOCK_DGRAM:
+        hints.ai_protocol = IPPROTO_UDP;
+        break;
+    default:
+        assert(false);
+        break;
+    }
     //hints.ai_flags = AI_PASSIVE;
 
     // Resolve the server address and port
@@ -83,53 +91,87 @@ int server_t::run(std::string address, std::string port)
 
     freeaddrinfo(result);
 
-    iResult = listen(ListenSocket, SOMAXCONN);
-    if (iResult == SOCKET_ERROR) {
-        printf("listen failed with error: %d\n", WSAGetLastError());
-        closesocket(ListenSocket);
-        WSACleanup();
-        return 1;
+    if (DefaultSocketType == SOCK_STREAM)
+    {
+        iResult = listen(ListenSocket, SOMAXCONN);
+        if (iResult == SOCKET_ERROR) {
+            printf("listen failed with error: %d\n", WSAGetLastError());
+            closesocket(ListenSocket);
+            WSACleanup();
+            return 1;
+        }
     }
 
     while (true)
     {
-        printf("Waiting for client...\n");
+        if (DefaultSocketType == SOCK_STREAM)
+        {
+            printf("Waiting for client...\n");
 
-        sockaddr result;
-        int resultLen = sizeof(sockaddr);
+            sockaddr result;
+            int resultLen = sizeof(sockaddr);
 
-        // Accept a client socket
-        ClientSocket = accept(ListenSocket, &result, &resultLen);
-        if (ClientSocket == INVALID_SOCKET) {
-            WinError systemError;
-            printf("accept failed with error: %s\n", systemError.to_string().c_str());
-            closesocket(ListenSocket);
-            WSACleanup();
-            continue; //return 1;
+            // Accept a client socket
+            ClientSocket = accept(ListenSocket, &result, &resultLen);
+            if (ClientSocket == INVALID_SOCKET) {
+                WinError systemError;
+                printf("accept failed with error: %s\n", systemError.to_string().c_str());
+                closesocket(ListenSocket);
+                WSACleanup();
+                continue; //return 1;
+            }
+
+            socket_connection_t connection(ClientSocket);
+            memcpy((uint8_t*)&connection.sockaddr,(uint8_t*) &result, resultLen); // Copy.
+            connection.sockaddrlen = resultLen;
+            connections.push_back(connection);
+
+            auto worker = std::make_unique<client_worker_t>();
+            worker->connection = connection;
+            worker->thread = CreateThread(
+                NULL,                   // default security attributes
+                0,                      // use default stack size  
+                client_thread_do_work,       // thread function name
+                worker.get(),          // argument to thread function 
+                0,                      // use default creation flags 
+                (LPDWORD)&worker->threadId);   // returns the thread identifier 
+            client_workers.push_back(std::move(worker));
+
+            packet_t packet = packet_t::from_string(connection.get_address_name() + " connected.");
+            send_packet_to_clients(packet);
+            packet.release();
         }
+        // UDP is connectionless.
+        else if (DefaultSocketType == SOCK_DGRAM)
+        {
+            SOCKADDR_STORAGE from;
+            int fromlen = sizeof(SOCKADDR_STORAGE);
+            int ret;
+            char recvbuf[DEFAULT_BUFLEN];
+            int recvbuflen = DEFAULT_BUFLEN;
 
-        wchar_t buffer[2048];
-        int bufferLen = 2048;
-        int ret = WSAAddressToStringW(&result, resultLen, NULL, buffer, (LPDWORD) & bufferLen);
-        assert(ret == 0);
+            socket_connection_t connection(ListenSocket);
 
-        socket_connection_t connection(ClientSocket, std::wstring(buffer));
-        connections.push_back(connection);
+            iResult = recvfrom(ListenSocket, recvbuf, recvbuflen, 0, (SOCKADDR*)&from, &fromlen);
+            if (iResult == SOCKET_ERROR)
+            {
+                WinError systemError;
+                printf("recvfrom socket error: %s\n", systemError.to_string().c_str());
+                continue;
+            }
+            else
+            {
+                memcpy((uint8_t*)&connection.sockaddr, (uint8_t*)&from, fromlen);
+                connection.sockaddrlen = fromlen;
 
-        auto worker = std::make_unique<client_worker_t>();
-        worker->connection = connection;
-        worker->thread = CreateThread(
-            NULL,                   // default security attributes
-            0,                      // use default stack size  
-            client_thread_do_work,       // thread function name
-            worker.get(),          // argument to thread function 
-            0,                      // use default creation flags 
-            (LPDWORD)&worker->threadId);   // returns the thread identifier 
-        client_workers.push_back(std::move(worker));
-
-        packet_t packet = packet_t::from_string(std::string(connection.address.begin(), connection.address.end()) + " connected.");
-        send_packet_to_clients(packet);
-        packet.release();
+                printf("Client bytes received: %d\n", iResult);
+                printf("Server received message: %s from %s\n", recvbuf, connection.get_address_name().c_str());
+            }
+        }
+        else
+        {
+            assert(false);
+        }
     }
 
     // cleanup
@@ -145,7 +187,22 @@ int server_t::send_packet_to_clients(packet_t packet)
     {
         assert(packet.size_bytes < worker->connection.get_max_size_bytes());
         // send will block when there is no buffer space left within the transport system.
-        int iSendResult = send(worker->connection.socket, (const char*)packet.bytes, packet.size_bytes, 0);
+        int iSendResult;
+        int socket_type = worker->connection.get_socket_type();
+        switch (socket_type) {
+        case SOCK_STREAM: {
+            iSendResult = send(worker->connection.socket, (char*)packet.bytes, packet.size_bytes, 0);
+            break;
+        }
+        case SOCK_DGRAM: {
+            iSendResult = sendto(worker->connection.socket, (char*)packet.bytes, packet.size_bytes, 0, (const SOCKADDR*)&worker->connection.sockaddr, worker->connection.sockaddrlen);
+            break;
+        }
+        default: {
+            assert(false);
+            break;
+        }
+        }
         if (iSendResult == SOCKET_ERROR) {
             printf("Client send failed with error: %d\n", WSAGetLastError());
             closesocket(worker->connection.socket);
@@ -163,7 +220,7 @@ int server_t::send_packet_to_clients(packet_t packet)
 
 int client_worker_t::do_work()
 {
-    printf("Client %ls connected!\n", connection.address.c_str());
+    printf("Client %s connected!\n", connection.get_address_name().c_str());
 
     int iResult;
     int iSendResult;
@@ -174,7 +231,21 @@ int client_worker_t::do_work()
 	do {
 		ZeroMemory(recvbuf, 0, recvbuflen);
 
-		iResult = recv(connection.socket, recvbuf, recvbuflen, 0);
+        int socket_type = connection.get_socket_type();
+        switch (socket_type) {
+        case SOCK_STREAM: {
+            iResult = recv(connection.socket, recvbuf, recvbuflen, 0);
+            break;
+        }
+        case SOCK_DGRAM: {
+            iResult = recvfrom(connection.socket, recvbuf, recvbuflen, 0, (SOCKADDR*)&connection.sockaddr, &connection.sockaddrlen);
+            break;
+        }
+        default: {
+            assert(false);
+            break;
+        }
+        }
 		if (iResult > 0) {
 			printf("Client bytes received: %d\n", iResult);
 			printf("Server received message: %s\n", recvbuf);

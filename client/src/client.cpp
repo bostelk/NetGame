@@ -36,14 +36,23 @@ int client_t::run(std::string address, std::string port)
         return 1;
     }
 
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
+    int DefaultSocketType = SOCK_DGRAM;
 
-    // UDP is connectionless.
-    // hints.ai_socktype = SOCK_DGRAM;
-    // hints.ai_protocol = IPPROTO_UDP;
+    ZeroMemory(&hints, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = DefaultSocketType;
+    switch (hints.ai_socktype)
+    {
+    case SOCK_STREAM:
+        hints.ai_protocol = IPPROTO_TCP;
+        break;
+    case SOCK_DGRAM:
+        hints.ai_protocol = IPPROTO_UDP;
+        break;
+    default:
+        assert(false);
+        break;
+    }
 
     // Resolve the server address and port
     iResult = getaddrinfo(address.c_str(), port.c_str(), &hints, &result);
@@ -57,7 +66,6 @@ int client_t::run(std::string address, std::string port)
 
     // Attempt to connect to an address until one succeeds
     for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
-
         // Create a SOCKET for connecting to server
         ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype,
             ptr->ai_protocol);
@@ -69,21 +77,20 @@ int client_t::run(std::string address, std::string port)
 
         printf("Connecting to server...\n");
 
-        wchar_t buffer[2048];
-        int bufferLen = 2048;
-        int ret = WSAAddressToStringW(ptr->ai_addr, ptr->ai_addrlen, NULL, buffer, (LPDWORD)&bufferLen);
-        assert(ret == 0);
+        connection = socket_connection_t(ConnectSocket);
+        memcpy((uint8_t*)&connection.sockaddr, (uint8_t*)ptr->ai_addr, ptr->ai_addrlen); // Copy.
+        connection.sockaddrlen = ptr->ai_addrlen;
 
         // Connect to server.
         iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
         if (iResult == SOCKET_ERROR) {
-            printf("Connection to server failed: %ls\n", buffer);
+            WinError systemError;
+            printf("Connection to server failed: %s\n%s\n", connection.get_address_name().c_str(), systemError.to_string().c_str());
             closesocket(ConnectSocket);
             ConnectSocket = INVALID_SOCKET;
             continue;
         }
 
-        connection = socket_connection_t(ConnectSocket, std::wstring(buffer));
         break;
     }
 
@@ -95,7 +102,7 @@ int client_t::run(std::string address, std::string port)
         return 1;
     }
 
-    printf("Connected! to server: %ls\n", connection.address.c_str());
+    printf("Connected! to server: %s\n", connection.get_address_name().c_str());
 
     packet_t packet = packet_t::from_string("hello world!");
     send_to_server(packet);
@@ -105,7 +112,24 @@ int client_t::run(std::string address, std::string port)
     do {
         ZeroMemory(recvbuf, 0, recvbuflen);
 
-        iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
+        SOCKADDR_STORAGE from;
+        int fromlen = sizeof(SOCKADDR_STORAGE);
+
+        int socket_type = connection.get_socket_type();
+        switch (socket_type) {
+        case SOCK_STREAM: {
+            iResult = recv(connection.socket, recvbuf, recvbuflen, 0);
+            break;
+        }
+        case SOCK_DGRAM: {
+            iResult = recvfrom(connection.socket, recvbuf, recvbuflen, 0, (SOCKADDR*)&from, &fromlen);
+            break;
+        }
+        default: {
+            assert(false);
+            break;
+        }
+        }
         if (iResult > 0) {
             printf("Bytes received: %d\n", iResult);
             printf("Client received message: %s\n", recvbuf);
@@ -114,6 +138,12 @@ int client_t::run(std::string address, std::string port)
             printf("Connection closed\n");
         else {
             WinError systemError;
+            if (systemError.code == WSAECONNRESET)
+            {
+                iResult = 1; // Fake bytes received.
+                // Ignore ICMP unreachable.
+                continue;
+            }
             printf("recv failed with error: %s\n", systemError.to_string().c_str());
         }
     } while (iResult > 0);
@@ -137,7 +167,22 @@ int client_t::run(std::string address, std::string port)
 int client_t::send_to_server(packet_t packet)
 {
     assert(packet.size_bytes < connection.get_max_size_bytes());
-    int iResult = send(connection.socket, (char*)packet.bytes, packet.size_bytes, 0);
+    int iResult;
+    int socket_type = connection.get_socket_type();
+    switch (socket_type) {
+    case SOCK_STREAM: {
+        iResult = send(connection.socket, (char*)packet.bytes, packet.size_bytes, 0);
+        break;
+    }
+    case SOCK_DGRAM: {
+        iResult = sendto(connection.socket, (char*)packet.bytes, packet.size_bytes, 0, (const SOCKADDR*)&connection.sockaddr, connection.sockaddrlen);
+        break;
+    }
+    default: {
+        assert(false);
+        break;
+    }
+    }
     if (iResult == SOCKET_ERROR) {
         printf("send failed with error: %d\n", WSAGetLastError());
         closesocket(connection.socket);
