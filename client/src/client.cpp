@@ -97,10 +97,7 @@ int client_t::run(std::string address, std::string port)
 
     printf("Connected! to server: %ls\n", connection.address.c_str());
 
-    std::string message = "hello world!";
-    packet_t packet(message.size() + 1);
-    packet.alloc();
-    memcpy(packet.bytes, message.c_str(), packet.size_bytes);
+    packet_t packet = packet_t::from_string("hello world!");
     send_to_server(packet);
     packet.release();
 

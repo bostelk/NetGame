@@ -127,10 +127,7 @@ int server_t::run(std::string address, std::string port)
             (LPDWORD)&worker->threadId);   // returns the thread identifier 
         client_workers.push_back(std::move(worker));
 
-        std::string message = std::string(connection.address.begin(), connection.address.end()) + " connected.";
-        packet_t packet(message.size() + 1); // Add 1 for null terminator.
-        packet.alloc();
-        memcpy(packet.bytes, message.c_str(), packet.size_bytes);
+        packet_t packet = packet_t::from_string(std::string(connection.address.begin(), connection.address.end()) + " connected.");
         send_packet_to_clients(packet);
         packet.release();
     }

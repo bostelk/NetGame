@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 
 struct packet_t
 {
@@ -10,4 +11,7 @@ struct packet_t
 
 	void alloc();
 	void release();
+
+	// Caller must release.
+	static packet_t from_string(std::string message);
 };
